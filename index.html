@@ -3,8 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Chương 5 Lab: Multi-Client, Broadcast & MQTT Collaborative Whiteboard</title>
-  <!-- Nhúng thư viện MQTT.js qua CDN -->
+  <title>Nhóm 4 Lab: MQTT Collaborative Whiteboard</title>
   <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
   <style>
     :root {
@@ -22,647 +21,793 @@
 
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
     body { background-color: var(--bg-main); color: var(--text-main); min-height: 100vh; display: flex; flex-direction: column; }
-    
     header { background-color: rgba(30, 41, 59, 0.9); backdrop-filter: blur(8px); border-bottom: 1px solid var(--border-color); padding: 1rem 2rem; position: sticky; top: 0; z-index: 100; }
     .header-title { font-size: 1.25rem; font-weight: 700; color: var(--accent-blue); display: flex; align-items: center; gap: 0.5rem; }
     .header-sub { font-size: 0.85rem; color: var(--text-muted); margin-top: 0.25rem; }
-
     .nav-tabs { display: flex; gap: 0.5rem; background-color: var(--bg-main); padding: 0.75rem 2rem 0; border-bottom: 1px solid var(--border-color); overflow-x: auto; }
     .tab-btn { background: none; border: none; color: var(--text-muted); padding: 0.75rem 1.25rem; font-size: 0.95rem; font-weight: 600; cursor: pointer; border-bottom: 3px solid transparent; transition: all 0.2s; white-space: nowrap; }
     .tab-btn:hover { color: var(--text-main); }
     .tab-btn.active { color: var(--accent-blue); border-bottom-color: var(--accent-blue); background-color: rgba(56, 189, 248, 0.05); border-radius: 6px 6px 0 0; }
-
     main { flex: 1; padding: 1.5rem 2rem; max-width: 1500px; margin: 0 auto; width: 100%; }
     .tab-content { display: none; }
     .tab-content.active { display: block; }
-
     .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
     .grid-sidebar { display: grid; grid-template-columns: 320px 1fr; gap: 1.5rem; }
     @media (max-width: 1000px) { .grid-2, .grid-sidebar { grid-template-columns: 1fr; } }
-
     .card { background-color: var(--bg-card); border: 1px solid var(--border-color); border-radius: 10px; padding: 1.25rem; margin-bottom: 1.5rem; }
-    .card-title { font-size: 1.05rem; font-weight: 600; color: var(--text-main); margin-bottom: 1rem; display: flex; align-items: center; justify-content: space-between; }
-    
+    .card-title { font-size: 1.05rem; font-weight: 600; color: var(--text-main); margin-bottom: 1rem; display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
     .badge { font-size: 0.75rem; padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: 600; text-transform: uppercase; }
     .badge-blue { background-color: rgba(56, 189, 248, 0.2); color: var(--accent-blue); }
     .badge-green { background-color: rgba(34, 197, 94, 0.2); color: var(--accent-green); }
     .badge-amber { background-color: rgba(245, 158, 11, 0.2); color: var(--accent-amber); }
     .badge-purple { background-color: rgba(168, 85, 247, 0.2); color: var(--accent-purple); }
-
     .btn { background-color: var(--accent-blue); color: #000; border: none; padding: 0.6rem 1rem; border-radius: 6px; font-weight: 600; cursor: pointer; transition: opacity 0.2s; display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; font-size: 0.875rem; width: 100%; margin-top: 0.5rem; }
     .btn:hover { opacity: 0.9; }
     .btn-danger { background-color: var(--accent-red); color: #fff; }
-
-    .canvas-container { background-color: #090d16; border: 1px solid var(--border-color); border-radius: 8px; padding: 0.5rem; text-align: center; margin-bottom: 1rem; }
-    
-    canvas.drawing-canvas { background-color: #ffffff; border-radius: 6px; cursor: crosshair; display: block; width: 100%; height: 480px; touch-action: none; }
+    .canvas-container { background-color: #090d16; border: 1px solid var(--border-color); border-radius: 8px; padding: 0.5rem; text-align: center; margin-bottom: 1rem; position: relative; }
+    canvas.drawing-canvas { background-color: #fff; border-radius: 6px; cursor: crosshair; display: block; width: 100%; height: 480px; touch-action: none; }
     .anim-canvas { display: block; width: 100%; max-width: 420px; height: 180px; margin: 0 auto; border-radius: 6px; }
-
     .log-box { height: 150px; overflow-y: auto; background-color: #090d16; border: 1px solid var(--border-color); border-radius: 6px; padding: 0.5rem 0.75rem; font-family: monospace; font-size: 0.75rem; color: #38bdf8; }
     .log-line { margin-bottom: 0.25rem; word-break: break-all; }
-
     .client-list { max-height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.5rem; }
     .client-item { background-color: #0f172a; border: 1px solid var(--border-color); border-radius: 6px; padding: 0.5rem 0.75rem; font-size: 0.8rem; display: flex; align-items: center; justify-content: space-between; }
-    
     .color-picker { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
     .color-btn { width: 32px; height: 32px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; }
     .color-btn.active { border-color: #fff; transform: scale(1.1); }
-    
     code.inline-code { background-color: #334155; color: var(--accent-blue); padding: 0.1rem 0.3rem; border-radius: 4px; font-size: 0.8rem; }
     .theory-text { font-size: 0.9rem; color: var(--text-muted); line-height: 1.7; margin-bottom: 0.75rem; }
     .theory-list { margin-left: 1.25rem; font-size: 0.875rem; color: var(--text-muted); line-height: 1.6; margin-bottom: 1rem; }
-    
     .step-box { background-color: #0f172a; border: 1px solid var(--border-color); border-radius: 6px; padding: 1rem; margin-bottom: 1rem; }
     .step-box h4 { color: var(--accent-blue); font-size: 0.95rem; margin-bottom: 0.5rem; }
+    .monitor-box { height: 190px; overflow-y: auto; background: #090d16; border: 1px solid var(--border-color); border-radius: 6px; padding: 0.5rem 0.75rem; font: 0.75rem/1.5 monospace; color: #c4b5fd; }
+    .monitor-line { padding: 0.2rem 0; border-bottom: 1px solid rgba(148,163,184,.12); overflow-wrap: anywhere; }
+    .control-row { display:flex; justify-content:space-between; align-items:center; gap:.75rem; margin:.6rem 0; font-size:.8rem; color:var(--text-muted); }
+    .stats-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:.5rem; margin-top:.75rem; }
+    .stat { background:#0f172a; border:1px solid var(--border-color); border-radius:6px; padding:.55rem; text-align:center; }
+    .stat strong { display:block; color:var(--accent-blue); font-size:1.1rem; }
+    .stat span { color:var(--text-muted); font-size:.7rem; }
+    .cursor-layer { position:absolute; inset:.5rem; pointer-events:none; overflow:hidden; border-radius:6px; }
+    .remote-cursor { position:absolute; transform:translate(-2px,-2px); white-space:nowrap; font-size:11px; font-weight:700; color:#fff; text-shadow:0 1px 3px #000; }
+    .remote-cursor::before { content:""; display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:4px; background:var(--cursor-color,#38bdf8); border:1px solid white; }
+    .small-note { font-size:.75rem; color:var(--text-muted); line-height:1.5; }
   </style>
 </head>
 <body>
+<header>
+  <div class="header-title">🌐 Nhóm 4: Multi-Client, Broadcast & MQTT Architecture</div>
+  <div class="header-sub">Nền tảng học tập trực quan: Phân tích nguyên lý Broadcast/Multicast, MQTT Broker và Ứng dụng Bảng vẽ phân tán</div>
+</header>
 
-  <header>
-    <div class="header-title">🌐 Chương 5 Lab: Multi-Client, Broadcast & MQTT Architecture</div>
-    <div class="header-sub">Nền tảng học tập trực quan: Phân tích nguyên lý Broadcast/Multicast, MQTT Broker và Ứng dụng Bảng vẽ phân tán</div>
-  </header>
+<nav class="nav-tabs">
+  <button class="tab-btn active" onclick="switchTab('tab1')">1. Mô Hình Unicast, Broadcast & Multicast</button>
+  <button class="tab-btn" onclick="switchTab('tab2')">2. Cơ chế Public MQTT Broker</button>
+  <button class="tab-btn" onclick="switchTab('tab3')">3. Phòng Lab: Whiteboard Phân Tán</button>
+  <button class="tab-btn" onclick="switchTab('tab4')">4. Phân Tích Gói Tin Bằng Wireshark</button>
+</nav>
 
-  <nav class="nav-tabs">
-    <button class="tab-btn active" onclick="switchTab('tab1')">1. Mô Hình Unicast, Broadcast & Multicast</button>
-    <button class="tab-btn" onclick="switchTab('tab2')">2. Cơ chế Public MQTT Broker</button>
-    <button class="tab-btn" onclick="switchTab('tab3')">3. Phòng Lab: Whiteboard Phân Tán</button>
-    <button class="tab-btn" onclick="switchTab('tab4')">4. Phân Tích Gói Tin Bằng Wireshark</button>
-  </nav>
-
-  <main>
-    <!-- TAB 1: 3 MÔ HÌNH TRUYỀN THÔNG -->
-    <div id="tab1" class="tab-content active">
-      <div class="grid-2">
-        <div class="card">
-          <div class="card-title">
-            <span>1. Unicast (Điểm tới Điểm)</span>
-            <span class="badge badge-blue">1-to-1</span>
-          </div>
-          <div class="canvas-container">
-            <canvas id="unicastCanvas" class="anim-canvas" width="420" height="180"></canvas>
-          </div>
-          <p class="theory-text">Truyền dữ liệu trực tiếp giữa đúng một thiết bị nguồn và một thiết bị đích riêng biệt trong mạng.</p>
-          <ul class="theory-list">
-            <li><b>Đặc điểm:</b> Riêng tư cao, chiếm băng thông tuyến tính theo số kết nối.</li>
-            <li><b>Ứng dụng thực tế:</b> Duyệt web (HTTP/HTTPS), truyền file FTP.</li>
-          </ul>
-        </div>
-
-        <div class="card">
-          <div class="card-title">
-            <span>2. Broadcast (Phát Quãng Bá)</span>
-            <span class="badge badge-amber">1-to-All</span>
-          </div>
-          <div class="canvas-container">
-            <canvas id="broadcastCanvas" class="anim-canvas" width="420" height="180"></canvas>
-          </div>
-          <p class="theory-text">Gói tin phát tán đồng thời từ một nguồn tới tất cả các thiết bị trong cùng phân đoạn mạng LAN.</p>
-          <ul class="theory-list">
-            <li><b>Đặc điểm:</b> Dễ gây nghẽn mạng (Broadcast Storm) nếu lạm dụng.</li>
-            <li><b>Ứng dụng thực tế:</b> Phân giải địa chỉ MAC (ARP), cấp phát IP (DHCP Discover).</li>
-          </ul>
-        </div>
-      </div>
-
+<main>
+  <div id="tab1" class="tab-content active">
+    <div class="grid-2">
       <div class="card">
-        <div class="card-title">
-          <span>3. Multicast (Phát Nhóm)</span>
-          <span class="badge badge-purple">1-to-Many Group</span>
-        </div>
-        <div class="grid-2" style="align-items: center;">
-          <div class="canvas-container" style="margin-bottom: 0;">
-            <canvas id="multicastCanvas" class="anim-canvas" width="420" height="180"></canvas>
-          </div>
-          <div>
-            <p class="theory-text">Truyền thông tin tới một nhóm thiết bị cụ thể đã đăng ký tham gia (Joined Group) qua dải IP Class D.</p>
-            <ul class="theory-list">
-              <li><b>Đặc điểm:</b> Tiết kiệm băng thông tối đa, thiết bị ngoài nhóm tự động loại bỏ gói tin.</li>
-              <li><b>Ứng dụng thực tế:</b> Truyền hình trực tuyến IPTV, hội nghị truyền hình, định tuyến OSPF.</li>
-            </ul>
-          </div>
-        </div>
+        <div class="card-title"><span>1. Unicast (Điểm tới Điểm)</span><span class="badge badge-blue">1-to-1</span></div>
+        <div class="canvas-container"><canvas id="unicastCanvas" class="anim-canvas" width="420" height="180"></canvas></div>
+        <p class="theory-text">Truyền dữ liệu trực tiếp giữa đúng một thiết bị nguồn và một thiết bị đích riêng biệt trong mạng.</p>
+        <ul class="theory-list">
+          <li><b>Đặc điểm:</b> Riêng tư cao, chiếm băng thông tuyến tính theo số kết nối.</li>
+          <li><b>Ứng dụng thực tế:</b> Duyệt web (HTTP/HTTPS), truyền file FTP.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-title"><span>2. Broadcast (Phát Quãng Bá)</span><span class="badge badge-amber">1-to-All</span></div>
+        <div class="canvas-container"><canvas id="broadcastCanvas" class="anim-canvas" width="420" height="180"></canvas></div>
+        <p class="theory-text">Gói tin phát tán đồng thời từ một nguồn tới tất cả các thiết bị trong cùng phân đoạn mạng LAN.</p>
+        <ul class="theory-list">
+          <li><b>Đặc điểm:</b> Dễ gây nghẽn mạng (Broadcast Storm) nếu lạm dụng.</li>
+          <li><b>Ứng dụng thực tế:</b> Phân giải địa chỉ MAC (ARP), cấp phát IP (DHCP Discover).</li>
+        </ul>
       </div>
     </div>
-
-    <!-- TAB 2: CƠ CHẾ PUBLIC MQTT BROKER -->
-    <div id="tab2" class="tab-content">
-      <div class="card">
-        <div class="card-title">
-          <span>Mô Phỏng Hoạt Họa: Publish / Subscribe qua MQTT Broker</span>
-          <button class="btn" style="width: auto; padding: 0.3rem 0.8rem; font-size: 0.75rem;" onclick="startMqttAnim()">Chạy Lại Hoạt Họa</button>
-        </div>
-        <div class="canvas-container">
-          <canvas id="mqttAnimCanvas" width="900" height="260" style="max-width: 900px; height: 260px;"></canvas>
-        </div>
-        <div id="mqttAnimText" style="text-align: center; font-size: 0.85rem; color: var(--accent-green); font-weight: 600;">
-          Đang khởi tạo mô phỏng MQTT Broker...
-        </div>
-      </div>
-
-      <div class="grid-2">
-        <div class="card">
-          <div class="card-title">
-            <span>Kiến Trúc Publish / Subscribe (Pub/Sub)</span>
-            <span class="badge badge-blue">Decoupled Architecture</span>
-          </div>
-          <p class="theory-text">MQTT hoạt động dựa trên mô hình bất đồng bộ tách rời (Decoupled):</p>
-          <ul class="theory-list">
-            <li><b>Publisher:</b> Đẩy thông điệp gắn liền với một <i>Topic</i> lên Broker.</li>
-            <li><b>Subscriber:</b> Đăng ký lắng nghe các <i>Topic</i> quan tâm qua Broker.</li>
-            <li><b>Broker:</b> Nhận, lọc và định tuyến thông điệp từ Publisher đến đúng các Subscriber.</li>
-          </ul>
-        </div>
-
-        <div class="card">
-          <div class="card-title">
-            <span>Ưu Điểm Của MQTT over WebSockets</span>
-            <span class="badge badge-green">Browser Friendly</span>
-          </div>
-          <p class="theory-text">Cho phép ứng dụng trình duyệt web kết nối mượt mà tới các Public Broker toàn cầu:</p>
-          <ul class="theory-list">
-            <li><b>Header siêu nhỏ:</b> Gói tin điều khiển tối ưu hóa băng thông.</li>
-            <li><b>Xuyên tường lửa:</b> Hoạt động ổn định trên cổng bảo mật chuẩn (<code class="inline-code">wss://</code>).</li>
-          </ul>
-        </div>
-      </div>
-    </div>
-
-    <!-- TAB 3: PHÒNG LAB WHITEBOARD PHÂN TÁN -->
-    <div id="tab3" class="tab-content">
-      <div class="grid-sidebar">
+    <div class="card">
+      <div class="card-title"><span>3. Multicast (Phát Nhóm)</span><span class="badge badge-purple">1-to-Many Group</span></div>
+      <div class="grid-2" style="align-items:center;">
+        <div class="canvas-container" style="margin-bottom:0;"><canvas id="multicastCanvas" class="anim-canvas" width="420" height="180"></canvas></div>
         <div>
-          <div class="card">
-            <div class="card-title">
-              <span>Trạng Thái Kết Nối MQTT</span>
-              <span id="connStatus" class="badge badge-amber">Đang kết nối...</span>
-            </div>
-            <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.5rem;">
-              Broker: <code class="inline-code">broker.hivemq.com:8884</code>
-            </p>
-            <p style="font-size: 0.75rem; color: var(--text-muted);">
-              Mã nhận diện Client: <strong id="myClientId" style="color: var(--accent-blue);">--</strong>
-            </p>
-          </div>
-
-          <div class="card">
-            <div class="card-title">
-              <span>Danh Sách Client Trực Tuyến</span>
-              <span id="clientCountBadge" class="badge badge-blue">0 Online</span>
-            </div>
-            <div class="client-list" id="clientListContainer">
-              <div style="font-size: 0.8rem; color: var(--text-muted); text-align: center; padding: 1rem;">Đang đồng bộ danh sách...</div>
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="card-title"><span>Công Cụ Vẽ</span></div>
-            <div style="margin-bottom: 0.75rem;">
-              <label style="font-size: 0.8rem; color: var(--text-muted); display: block; margin-bottom: 0.25rem;">Màu sắc nét cọ:</label>
-              <div class="color-picker">
-                <div class="color-btn active" style="background-color: #0f172a;" onclick="setColor('#0f172a', this)"></div>
-                <div class="color-btn" style="background-color: #ef4444;" onclick="setColor('#ef4444', this)"></div>
-                <div class="color-btn" style="background-color: #22c55e;" onclick="setColor('#22c55e', this)"></div>
-                <div class="color-btn" style="background-color: #38bdf8;" onclick="setColor('#38bdf8', this)"></div>
-              </div>
-            </div>
-            <div style="margin-bottom: 1rem;">
-              <label style="font-size: 0.8rem; color: var(--text-muted); display: block; margin-bottom: 0.25rem;">Độ dày: <span id="sizeVal">4</span>px</label>
-              <input type="range" id="brushSize" min="1" max="20" value="4" style="width: 100%; accent-color: var(--accent-blue);" oninput="document.getElementById('sizeVal').textContent=this.value">
-            </div>
-            <button class="btn btn-danger" onclick="clearBoard()">Xóa Sạch Bảng Chung</button>
-          </div>
-
-          <div class="card">
-            <div class="card-title"><span>Nhật Ký Thao Tác & Mạng</span></div>
-            <div class="log-box" id="netLogs"></div>
-          </div>
-        </div>
-
-        <div class="card" style="display: flex; flex-direction: column;">
-          <div class="card-title">
-            <span>Bảng Vẽ Phân Tán (Hỗ trợ PC & Điện thoại cuộn trang)</span>
-            <span class="badge badge-green">Optimized Touch</span>
-          </div>
-          <div class="canvas-container" style="flex: 1; margin-bottom: 0;">
-            <canvas id="whiteboard" class="drawing-canvas" width="1000" height="600" style="height: 560px;"></canvas>
-          </div>
+          <p class="theory-text">Truyền thông tin tới một nhóm thiết bị cụ thể đã đăng ký tham gia (Joined Group) qua dải IP Class D.</p>
+          <ul class="theory-list">
+            <li><b>Đặc điểm:</b> Tiết kiệm băng thông tối đa, thiết bị ngoài nhóm tự động loại bỏ gói tin.</li>
+            <li><b>Ứng dụng thực tế:</b> Truyền hình trực tuyến IPTV, hội nghị truyền hình, định tuyến OSPF.</li>
+          </ul>
         </div>
       </div>
     </div>
+  </div>
 
-    <!-- TAB 4: PHÂN TÍCH GÓI TIN BẰNG WIRESHARK (MỚI BỔ SUNG) -->
-    <div id="tab4" class="tab-content">
+  <div id="tab2" class="tab-content">
+    <div class="card">
+      <div class="card-title">
+        <span>Mô Phỏng Hoạt Họa: Publish / Subscribe qua MQTT Broker</span>
+        <button class="btn" style="width:auto;padding:.3rem .8rem;font-size:.75rem" onclick="startMqttAnim()">Chạy Lại Hoạt Họa</button>
+      </div>
+      <div class="canvas-container"><canvas id="mqttAnimCanvas" width="900" height="260" style="max-width:900px;height:260px"></canvas></div>
+      <div id="mqttAnimText" style="text-align:center;font-size:.85rem;color:var(--accent-green);font-weight:600">Đang khởi tạo mô phỏng MQTT Broker...</div>
+    </div>
+    <div class="grid-2">
       <div class="card">
-        <div class="card-title">
-          <span>Hướng Dẫn Phân Tích & Bắt Gói Tin MQTT Broker Bằng Wireshark</span>
-          <span class="badge badge-green">Network Forensics</span>
-        </div>
-        <p class="theory-text">
-          Vì ứng dụng chạy trên giao thức <b>MQTT over WebSockets (<code class="inline-code">wss://</code> - cổng 8884)</b>, toàn bộ gói tin MQTT sẽ được đóng gói bên trong lớp bảo mật TLS/SSL mã hóa và lớp giao vận TCP. Dưới đây là quy trình chuẩn xác để sinh viên bắt và đọc gói tin trên Wireshark hoặc công cụ tương đương (như <i>TCP Dumump</i> hoặc <i>Browser Developer Tools</i>):
-        </p>
+        <div class="card-title"><span>Kiến Trúc Publish / Subscribe (Pub/Sub)</span><span class="badge badge-blue">Decoupled Architecture</span></div>
+        <p class="theory-text">MQTT hoạt động dựa trên mô hình bất đồng bộ tách rời (Decoupled):</p>
+        <ul class="theory-list">
+          <li><b>Publisher:</b> Đẩy thông điệp gắn liền với một <i>Topic</i> lên Broker.</li>
+          <li><b>Subscriber:</b> Đăng ký lắng nghe các <i>Topic</i> quan tâm qua Broker.</li>
+          <li><b>Broker:</b> Nhận, lọc và định tuyến thông điệp từ Publisher đến đúng các Subscriber.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-title"><span>Ưu Điểm Của MQTT over WebSockets</span><span class="badge badge-green">Browser Friendly</span></div>
+        <p class="theory-text">Cho phép ứng dụng trình duyệt web kết nối tới các Public Broker:</p>
+        <ul class="theory-list">
+          <li><b>Header siêu nhỏ:</b> Gói tin điều khiển tối ưu hóa băng thông.</li>
+          <li><b>Xuyên tường lửa:</b> Hoạt động trên cổng bảo mật chuẩn (<code class="inline-code">wss://</code>).</li>
+        </ul>
+      </div>
+    </div>
+  </div>
 
-        <div class="step-box">
-          <h4>Bước 1: Thiết lập bộ lọc (Display Filter) trên Wireshark</h4>
-          <p class="theory-text" style="margin-bottom: 0.5rem;">
-            Do cổng kết nối tới broker công cộng là <code class="inline-code">8884</code> và chạy mã hóa TLS, bạn hãy nhập các bộ lọc sau vào thanh Filter:
-          </p>
-          <ul class="theory-list" style="margin-bottom: 0;">
-            <li>Lọc theo cổng TCP: <code class="inline-code">tcp.port == 8884</code></li>
-            <li>Lọc theo giao thức WebSocket thô trước khi mã hóa (nếu bắt ở môi trường local): <code class="inline-code">websocket</code> hoặc <code class="inline-code">tls</code></li>
-          </ul>
+  <div id="tab3" class="tab-content">
+    <div class="grid-sidebar">
+      <div>
+        <div class="card">
+          <div class="card-title"><span>Trạng Thái Kết Nối MQTT</span><span id="connStatus" class="badge badge-amber">Đang kết nối...</span></div>
+          <p style="font-size:.75rem;color:var(--text-muted);margin-bottom:.5rem">Broker: <code class="inline-code">broker.hivemq.com:8884</code></p>
+          <p style="font-size:.75rem;color:var(--text-muted)">Mã nhận diện Client: <strong id="myClientId" style="color:var(--accent-blue)">--</strong></p>
+        </div>
+        <div class="card">
+          <div class="card-title"><span>Danh Sách Client Trực Tuyến</span><span id="clientCountBadge" class="badge badge-blue">0 Online</span></div>
+          <div class="client-list" id="clientListContainer"><div style="font-size:.8rem;color:var(--text-muted);text-align:center;padding:1rem">Đang đồng bộ danh sách...</div></div>
+        </div>
+        <div class="card">
+          <div class="card-title"><span>Công Cụ Vẽ</span></div>
+          <div style="margin-bottom:.75rem">
+            <label style="font-size:.8rem;color:var(--text-muted);display:block;margin-bottom:.25rem">Màu sắc nét cọ:</label>
+            <div class="color-picker">
+              <div class="color-btn active" style="background-color:#0f172a" onclick="setColor('#0f172a',this)"></div>
+              <div class="color-btn" style="background-color:#ef4444" onclick="setColor('#ef4444',this)"></div>
+              <div class="color-btn" style="background-color:#22c55e" onclick="setColor('#22c55e',this)"></div>
+              <div class="color-btn" style="background-color:#38bdf8" onclick="setColor('#38bdf8',this)"></div>
+            </div>
+          </div>
+          <div style="margin-bottom:1rem">
+            <label style="font-size:.8rem;color:var(--text-muted);display:block;margin-bottom:.25rem">Độ dày: <span id="sizeVal">4</span>px</label>
+            <input type="range" id="brushSize" min="1" max="20" value="4" style="width:100%;accent-color:var(--accent-blue)" oninput="document.getElementById('sizeVal').textContent=this.value">
+          </div>
+          <button class="btn btn-danger" onclick="clearBoard()">Xóa Sạch Bảng Chung</button>
         </div>
 
-        <div class="step-box">
-          <h4>Bước 2: Nhận diện các giai đoạn gói tin mạng</h4>
-          <ul class="theory-list" style="margin-bottom: 0;">
-            <li><b>TCP 3-Way Handshake:</b> Các gói tin <code class="inline-code">SYN</code>, <code class="inline-code">SYN-ACK</code>, <code class="inline-code">ACK</code> thiết lập kết nối giữa trình duyệt và <code class="inline-code">broker.hivemq.com</code>.</li>
-            <li><b>TLS Handshake (Client Hello / Server Hello):</b> Quá trình bắt tay bảo mật để trao đổi khóa mã hóa phiên truyền thông (vì dùng giao thức <code class="inline-code">wss://</code>).</li>
-            <li><b>WebSocket Frame / MQTT Payload:</b> Khi bạn thực hiện vẽ trên Tab 3, các gói tin dữ liệu chuyển động qua lại dạng khung WebSocket chứa nội dung JSON của MQTT Publish.</li>
-          </ul>
+        <div class="card">
+          <div class="card-title"><span>Mô Phỏng Chất Lượng Mạng</span><span class="badge badge-purple">Lab</span></div>
+          <div class="control-row"><label for="delayRange">Độ trễ gửi: <b id="delayVal">0</b> ms</label></div>
+          <input id="delayRange" type="range" min="0" max="2000" step="100" value="0" style="width:100%;accent-color:var(--accent-blue)" oninput="document.getElementById('delayVal').textContent=this.value">
+          <div class="control-row"><label for="lossRange">Tỷ lệ mất gói giả lập: <b id="lossVal">0</b>%</label></div>
+          <input id="lossRange" type="range" min="0" max="50" step="5" value="0" style="width:100%;accent-color:var(--accent-red)" oninput="document.getElementById('lossVal').textContent=this.value">
+          <p class="small-note">Chỉ mô phỏng với thông điệp nét vẽ gửi đi từ trình duyệt này; không làm thay đổi mạng thật hoặc cấu hình broker.</p>
+          <div class="stats-grid">
+            <div class="stat"><strong id="statSent">0</strong><span>Đã gửi</span></div>
+            <div class="stat"><strong id="statDropped">0</strong><span>Bị bỏ giả lập</span></div>
+            <div class="stat"><strong id="statReceived">0</strong><span>Đã nhận</span></div>
+          </div>
+          <button class="btn" onclick="resetNetworkStats()">Đặt lại thống kê</button>
         </div>
 
-        <div class="step-box">
-          <h4>Công cụ thay thế tuyệt vời: Trình duyệt Developer Tools (F12)</h4>
-          <p class="theory-text" style="margin-bottom: 0.5rem;">
-            Vì Wireshark phải giải mã lớp TLS khá phức tạp, bạn có thể hướng dẫn sinh viên dùng ngay tính năng có sẵn trên trình duyệt để soi trực tiếp nội dung gói tin MQTT mà không sợ bị mã hóa:
-          </p>
-          <ol class="theory-list" style="margin-bottom: 0;">
-            <li>Mở trình duyệt web, nhấn <b>F12</b> (hoặc chuột phải chọn <i>Inspect</i>).</li>
-            <li>Chuyển qua tab <b>Network</b> $\rightarrow$ chọn bộ lọc <b>WS</b> (WebSocket).</li>
-            <li>Nhấn vào kết nối đang chạy tên là <code class="inline-code">mqtt</code> hoặc kết nối đến cổng <code class="inline-code">8884</code>.</li>
-            <li>Chọn tab phụ <b>Messages</b>: Sinh viên sẽ nhìn thấy rõ mồn một từng gói tin <code class="inline-code">Send</code> và <code class="inline-code">Receive</code> chứa tọa độ JSON của nét vẽ truyền qua lại với MQTT Broker theo thời gian thực!</li>
-          </ol>
+        <div class="card">
+          <div class="card-title"><span>Nhật Ký Thao Tác & Mạng</span></div>
+          <div class="log-box" id="netLogs"></div>
+        </div>
+        <div class="card">
+          <div class="card-title"><span>Giám Sát Thông Điệp MQTT</span><span class="badge badge-purple">Live</span></div>
+          <div class="monitor-box" id="mqttMonitor"><div class="monitor-line">Đang chờ sự kiện MQTT...</div></div>
+          <button class="btn" onclick="clearMqttMonitor()">Xóa nhật ký giám sát</button>
+        </div>
+      </div>
+
+      <div class="card" style="display:flex;flex-direction:column">
+        <div class="card-title"><span>Bảng Vẽ Phân Tán (Hỗ trợ PC & Điện thoại cuộn trang)</span><span class="badge badge-green">Optimized Touch</span></div>
+        <div class="canvas-container" style="flex:1;margin-bottom:0">
+          <canvas id="whiteboard" class="drawing-canvas" width="1000" height="600" style="height:560px"></canvas>
+          <div id="cursorLayer" class="cursor-layer" aria-hidden="true"></div>
         </div>
       </div>
     </div>
+  </div>
+
+  <div id="tab4" class="tab-content">
+    <div class="card">
+      <div class="card-title"><span>Hướng Dẫn Phân Tích & Bắt Gói Tin MQTT Broker Bằng Wireshark</span><span class="badge badge-green">Network Forensics</span></div>
+      <p class="theory-text">Ứng dụng sử dụng MQTT over WebSockets (<b><code class="inline-code">wss://</code> - cổng 8884</b>). Nội dung MQTT được bảo vệ bởi TLS, vì vậy Wireshark thường thấy kết nối TLS/TCP thay vì payload MQTT ở dạng đọc được nếu không cấu hình giải mã TLS.</p>
+      <div class="step-box">
+        <h4>Bước 1: Thiết lập bộ lọc trên Wireshark</h4>
+        <p class="theory-text">Dùng bộ lọc <code class="inline-code">tcp.port == 8884</code> hoặc <code class="inline-code">tls</code> để tìm kết nối tới broker.</p>
+      </div>
+      <div class="step-box">
+        <h4>Bước 2: Tạo lưu lượng thử nghiệm</h4>
+        <p class="theory-text">Mở tab Whiteboard, kết nối MQTT rồi vẽ vài nét. Quay lại Wireshark và quan sát các gói TCP/TLS phát sinh.</p>
+      </div>
+      <div class="step-box">
+        <h4>Bước 3: Xem chi tiết kết nối</h4>
+        <p class="theory-text">Chọn gói tin rồi mở <b>Analyze → Follow → TCP Stream</b> để xem luồng byte. Nội dung vẫn được mã hóa nếu chưa giải mã TLS.</p>
+      </div>
+      <div class="step-box">
+        <h4>Bước 4: Đối chiếu với log ứng dụng</h4>
+        <p class="theory-text">So sánh thời gian gửi, topic và payload hiển thị trong bảng giám sát MQTT của ứng dụng với thời điểm lưu lượng xuất hiện trong Wireshark.</p>
+      </div>
+    </div>
+  </div>
   </main>
 
-  <script>
-    // --- TAB SWITCHING ---
-    function switchTab(tabId) {
-      document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-      document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-      document.getElementById(tabId).classList.add('active');
-      event.currentTarget.classList.add('active');
+<script>
+function switchTab(tabId) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+  document.getElementById(tabId).classList.add('active');
+  const index = ['tab1', 'tab2', 'tab3', 'tab4'].indexOf(tabId);
+  document.querySelectorAll('.tab-btn')[index]?.classList.add('active');
+  if (tabId === 'tab1') {
+    startUnicastAnim();
+    startBroadcastAnim();
+    startMulticastAnim();
+  }
+  if (tabId === 'tab2') startMqttAnim();
+}
 
-      if (tabId === 'tab1') {
-        startUnicastAnim();
-        startBroadcastAnim();
-        startMulticastAnim();
-      }
-      if (tabId === 'tab2') startMqttAnim();
-    }
+function animateNetwork(canvasId, type) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  let step = 0;
 
-    // --- ANIMATION 1: UNICAST ---
-    let unicastId = null;
-    function startUnicastAnim() {
-      const canvas = document.getElementById('unicastCanvas');
-      if (!canvas) return;
-      const ctx = canvas.getContext('2d');
-      let pos = 0;
-      if (unicastId) cancelAnimationFrame(unicastId);
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    step = (step + 2) % 300;
+    ctx.font = '11px sans-serif';
+    ctx.lineWidth = 2;
 
-      function draw() {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        pos = (pos + 2) % 280;
-
-        ctx.fillStyle = '#1e293b'; ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 2;
-        ctx.fillRect(20, 70, 70, 40); ctx.strokeRect(20, 70, 70, 40);
-        ctx.fillStyle = '#f8fafc'; ctx.font = '10px sans-serif'; ctx.fillText('Nguồn', 38, 95);
-
-        ctx.fillRect(330, 70, 70, 40); ctx.strokeRect(330, 70, 70, 40);
-        ctx.fillText('Đích', 352, 95);
-
-        ctx.beginPath(); ctx.moveTo(90, 90); ctx.lineTo(330, 90);
-        ctx.strokeStyle = '#334155'; ctx.lineWidth = 2; ctx.stroke();
-
-        let pX = 90 + pos;
-        if (pX <= 330) {
-          ctx.fillStyle = '#38bdf8'; ctx.beginPath(); ctx.arc(pX, 90, 7, 0, Math.PI * 2); ctx.fill();
-        }
-
-        unicastId = requestAnimationFrame(draw);
-      }
-      draw();
-    }
-
-    // --- ANIMATION 2: BROADCAST ---
-    let broadcastId = null;
-    function startBroadcastAnim() {
-      const canvas = document.getElementById('broadcastCanvas');
-      if (!canvas) return;
-      const ctx = canvas.getContext('2d');
-      let step = 0;
-      if (broadcastId) cancelAnimationFrame(broadcastId);
-
-      function draw() {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        step = (step + 1) % 120;
-
-        ctx.fillStyle = '#1e293b'; ctx.strokeStyle = '#f59e0b'; ctx.lineWidth = 2;
-        ctx.fillRect(20, 70, 70, 40); ctx.strokeRect(20, 70, 70, 40);
-        ctx.fillStyle = '#f8fafc'; ctx.font = '10px sans-serif'; ctx.fillText('Nguồn', 38, 95);
-
-        const targets = [{x: 330, y: 20}, {x: 330, y: 90}, {x: 330, y: 140}];
-        targets.forEach(t => {
-          ctx.fillStyle = '#1e293b'; ctx.strokeStyle = '#22c55e';
-          ctx.fillRect(t.x, t.y, 70, 30); ctx.strokeRect(t.x, t.y, 70, 30);
-          ctx.fillStyle = '#f8fafc'; ctx.fillText('Nhận', t.x + 22, t.y + 20);
-        });
-
-        let radius = (step * 3) % 320;
-        ctx.beginPath();
-        ctx.arc(55, 90, radius, 0, Math.PI * 2);
-        ctx.strokeStyle = `rgba(245, 158, 11, ${Math.max(0, 1 - radius / 320)})`;
-        ctx.lineWidth = 2;
-        ctx.stroke();
-
-        broadcastId = requestAnimationFrame(draw);
-      }
-      draw();
-    }
-
-    // --- ANIMATION 3: MULTICAST ---
-    let multicastId = null;
-    function startMulticastAnim() {
-      const canvas = document.getElementById('multicastCanvas');
-      if (!canvas) return;
-      const ctx = canvas.getContext('2d');
-      let pos = 0;
-      if (multicastId) cancelAnimationFrame(multicastId);
-
-      function draw() {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        pos = (pos + 2) % 260;
-
-        ctx.fillStyle = '#1e293b'; ctx.strokeStyle = '#a855f7'; ctx.lineWidth = 2;
-        ctx.fillRect(30, 70, 70, 40); ctx.strokeRect(30, 70, 70, 40);
-        ctx.fillStyle = '#f8fafc'; ctx.font = '10px sans-serif'; ctx.fillText('Nguồn', 48, 95);
-
-        const receivers = [
-          {x: 320, y: 20, inGroup: true},
-          {x: 320, y: 75, inGroup: false},
-          {x: 320, y: 130, inGroup: true}
-        ];
-
-        receivers.forEach(r => {
-          ctx.fillStyle = '#1e293b'; ctx.strokeStyle = r.inGroup ? '#22c55e' : '#64748b';
-          ctx.fillRect(r.x, r.y, 70, 30); ctx.strokeRect(r.x, r.y, 70, 30);
-          ctx.fillStyle = '#f8fafc'; ctx.fillText(r.inGroup ? 'Thành viên' : 'Ngoài nhóm', r.x + 5, r.y + 20);
-
-          if (r.inGroup) {
-            ctx.beginPath(); ctx.moveTo(100, 90); ctx.lineTo(320, r.y + 15);
-            ctx.strokeStyle = 'rgba(168, 85, 247, 0.4)'; ctx.lineWidth = 2; ctx.stroke();
-          }
-        });
-
-        let pX = 100 + pos;
-        if (pX <= 320) {
-          ctx.fillStyle = '#a855f7'; ctx.beginPath(); ctx.arc(pX, 90, 7, 0, Math.PI * 2); ctx.fill();
-        }
-
-        multicastId = requestAnimationFrame(draw);
-      }
-      draw();
-    }
-
-    // --- ANIMATION 4: MQTT ---
-    let mqttAnimId = null;
-    function startMqttAnim() {
-      const canvas = document.getElementById('mqttAnimCanvas');
-      if (!canvas) return;
-      const ctx = canvas.getContext('2d');
-      let pos = 0;
-      if (mqttAnimId) cancelAnimationFrame(mqttAnimId);
-
-      function draw() {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        pos = (pos + 2) % 300;
-
-        ctx.fillStyle = '#1e293b'; ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 2;
-        ctx.fillRect(50, 105, 110, 50); ctx.strokeRect(50, 105, 110, 50);
-        ctx.fillStyle = '#f8fafc'; ctx.font = 'bold 12px sans-serif'; ctx.fillText('PUBLISHER', 65, 135);
-
-        ctx.fillStyle = '#1e293b'; ctx.strokeStyle = '#a855f7'; ctx.lineWidth = 2;
-        ctx.fillRect(395, 90, 110, 80); ctx.strokeRect(395, 90, 110, 80);
-        ctx.fillStyle = '#f8fafc'; ctx.font = 'bold 12px sans-serif'; ctx.fillText('MQTT BROKER', 405, 135);
-
-        ctx.fillStyle = '#1e293b'; ctx.strokeStyle = '#22c55e'; ctx.lineWidth = 2;
-        ctx.fillRect(740, 50, 110, 50); ctx.strokeRect(740, 50, 110, 50);
-        ctx.fillStyle = '#f8fafc'; ctx.font = 'bold 11px sans-serif'; ctx.fillText('SUBSCRIBER 1', 750, 80);
-
-        ctx.fillStyle = '#1e293b'; ctx.strokeStyle = '#22c55e'; ctx.lineWidth = 2;
-        ctx.fillRect(740, 160, 110, 50); ctx.strokeRect(740, 160, 110, 50);
-        ctx.fillStyle = '#f8fafc'; ctx.font = 'bold 11px sans-serif'; ctx.fillText('SUBSCRIBER 2', 750, 190);
-
-        let p1X = 160 + pos;
-        if (p1X <= 395) {
-          ctx.fillStyle = '#38bdf8'; ctx.beginPath(); ctx.arc(p1X, 130, 8, 0, Math.PI * 2); ctx.fill();
-        }
-
-        let p2X = 505 + pos;
-        if (p2X <= 740) {
-          ctx.fillStyle = '#a855f7'; ctx.beginPath(); ctx.arc(p2X, 75, 8, 0, Math.PI * 2); ctx.fill();
-          ctx.fillStyle = '#a855f7'; ctx.beginPath(); ctx.arc(p2X, 185, 8, 0, Math.PI * 2); ctx.fill();
-        }
-
-        document.getElementById('mqttAnimText').textContent = "Mô phỏng MQTT Pub/Sub: Publisher gửi tin lên Broker $\rightarrow$ Broker phân phối xuống các Subscribers.";
-        mqttAnimId = requestAnimationFrame(draw);
-      }
-      draw();
-    }
-
-    // --- TAB 3: WHITEBOARD & TOUCH FIX ---
-    const canvas = document.getElementById('whiteboard');
-    const ctx = canvas.getContext('2d');
-    let painting = false;
-    let currentColor = '#0f172a';
-    let lastX = 0, lastY = 0;
-
-    const myId = 'Client_' + Math.floor(Math.random() * 9000 + 1000);
-    document.getElementById('myClientId').textContent = myId;
-
-    const topicName = "netprog/class/whiteboard/room_master";
-    const presenceTopic = "netprog/class/whiteboard/presence";
-
-    const activeClients = new Map();
-    activeClients.set(myId, { id: myId, status: 'Đang hoạt động', lastSeen: Date.now() });
-
-    function logNet(msg) {
-      const logs = document.getElementById('netLogs');
-      const time = new Date().toLocaleTimeString();
-      const line = document.createElement('div');
-      line.className = 'log-line';
-      line.innerHTML = `[${time}] ${msg}`;
-      logs.appendChild(line);
-      logs.scrollTop = logs.scrollHeight;
-    }
-
-    function updateClientListUI() {
-      const container = document.getElementById('clientListContainer');
-      container.innerHTML = '';
-      document.getElementById('clientCountBadge').textContent = `${activeClients.size} Online`;
-
-      activeClients.forEach((client, id) => {
-        const item = document.createElement('div');
-        item.className = 'client-item';
-        item.innerHTML = `
-          <span><b>${id}</b> ${id === myId ? '(Bạn)' : ''}</span>
-          <span class="badge badge-green">${client.status}</span>
-        `;
-        container.appendChild(item);
-      });
-    }
-
-    const client = mqtt.connect('wss://broker.hivemq.com:8884/mqtt', { clientId: myId });
-
-    client.on('connect', () => {
-      logNet('Đã kết nối thành công tới Public MQTT Broker!');
-      document.getElementById('connStatus').textContent = 'Đã kết nối';
-      document.getElementById('connStatus').className = 'badge badge-green';
-
-      client.subscribe([topicName, presenceTopic], (err) => {
-        if (!err) logNet(`Đã Subscribe vào các Topic chính.`);
-      });
-
-      setInterval(() => {
-        client.publish(presenceTopic, JSON.stringify({ id: myId, status: 'Active' }));
-      }, 3000);
-    });
-
-    client.on('message', (topic, payload) => {
-      try {
-        const data = JSON.parse(payload.toString());
-
-        if (topic === presenceTopic) {
-          if (data.id && data.id !== myId) {
-            activeClients.set(data.id, { id: data.id, status: 'Trực tuyến', lastSeen: Date.now() });
-            updateClientListUI();
-          }
-        } else if (topic === topicName) {
-          if (data.sender === myId) return;
-
-          if (data.type === 'draw') {
-            drawLine(data.x1, data.y1, data.x2, data.y2, data.color, data.size);
-            logNet(`[${data.sender}] Vẽ nét x(${Math.round(data.x1)}->${Math.round(data.x2)})`);
-          } else if (data.type === 'clear') {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            logNet(`[${data.sender}] Xóa sạch bảng`);
-          }
-        }
-      } catch (e) {
-        console.error(e);
-      }
-    });
-
-    function getCursorPos(e) {
-      const rect = canvas.getBoundingClientRect();
-      let clientX, clientY;
-      if (e.touches && e.touches.length > 0) {
-        clientX = e.touches[0].clientX;
-        clientY = e.touches[0].clientY;
-      } else {
-        clientX = e.clientX;
-        clientY = e.clientY;
-      }
-      return {
-        x: clientX - rect.left,
-        y: clientY - rect.top
-      };
-    }
-
-    function startPosition(e) {
-      e.preventDefault();
-      painting = true;
-      const pos = getCursorPos(e);
-      lastX = pos.x;
-      lastY = pos.y;
-    }
-
-    function drawPosition(e) {
-      if (!painting) return;
-      e.preventDefault();
-      const pos = getCursorPos(e);
-      const currentX = pos.x;
-      const currentY = pos.y;
-      const size = document.getElementById('brushSize').value;
-
-      drawLine(lastX, lastY, currentX, currentY, currentColor, size);
-
-      if (client.connected) {
-        const packet = JSON.stringify({
-          sender: myId,
-          type: 'draw',
-          x1: lastX, y1: lastY,
-          x2: currentX, y2: currentY,
-          color: currentColor,
-          size: size
-        });
-        client.publish(topicName, packet);
-      }
-
-      lastX = currentX;
-      lastY = currentY;
-    }
-
-    function endPosition(e) {
-      if (!painting) return;
-      painting = false;
-    }
-
-    canvas.addEventListener('mousedown', startPosition);
-    canvas.addEventListener('mousemove', drawPosition);
-    canvas.addEventListener('mouseup', endPosition);
-    canvas.addEventListener('mouseleave', endPosition);
-
-    canvas.addEventListener('touchstart', startPosition, { passive: false });
-    canvas.addEventListener('touchmove', drawPosition, { passive: false });
-    canvas.addEventListener('touchend', endPosition);
-
-    function drawLine(x1, y1, x2, y2, color, size) {
+    if (type === 'unicast') {
+      ctx.fillStyle = '#1e293b';
+      ctx.strokeStyle = '#38bdf8';
+      ctx.fillRect(20, 70, 70, 40);
+      ctx.strokeRect(20, 70, 70, 40);
+      ctx.fillStyle = '#f8fafc';
+      ctx.fillText('Nguồn', 38, 95);
+      ctx.fillStyle = '#1e293b';
+      ctx.fillRect(330, 70, 70, 40);
+      ctx.strokeRect(330, 70, 70, 40);
+      ctx.fillStyle = '#f8fafc';
+      ctx.fillText('Đích', 352, 95);
+      ctx.strokeStyle = '#334155';
       ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
-      ctx.strokeStyle = color;
-      ctx.lineWidth = size;
-      ctx.lineCap = 'round';
+      ctx.moveTo(90, 90);
+      ctx.lineTo(330, 90);
       ctx.stroke();
-      ctx.closePath();
-    }
+      ctx.fillStyle = '#38bdf8';
+      ctx.beginPath();
+      ctx.arc(90 + (step % 240), 90, 7, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (type === 'broadcast') {
+      ctx.fillStyle = '#1e293b';
+      ctx.strokeStyle = '#f59e0b';
+      ctx.fillRect(20, 70, 70, 40);
+      ctx.strokeRect(20, 70, 70, 40);
+      ctx.fillStyle = '#f8fafc';
+      ctx.fillText('Nguồn', 38, 95);
 
-    function setColor(color, element) {
-      currentColor = color;
-      document.querySelectorAll('.color-btn').forEach(btn => btn.classList.remove('active'));
-      element.classList.add('active');
-    }
+      [{x:330,y:20},{x:330,y:75},{x:330,y:130}].forEach(t => {
+        ctx.fillStyle = '#1e293b';
+        ctx.strokeStyle = '#22c55e';
+        ctx.fillRect(t.x, t.y, 70, 30);
+        ctx.strokeRect(t.x, t.y, 70, 30);
+        ctx.fillStyle = '#f8fafc';
+        ctx.fillText('Nhận', t.x + 22, t.y + 19);
+      });
 
-    function clearBoard() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      if (client.connected) {
-        client.publish(topicName, JSON.stringify({ sender: myId, type: 'clear' }));
-      }
-      logNet('Bạn đã gửi lệnh xóa toàn bộ bảng vẽ.');
-    }
+      const radius = (step * 2) % 160;
+      ctx.beginPath();
+      ctx.arc(55, 90, radius, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(245,158,11,${Math.max(0,1-radius/160)})`;
+      ctx.stroke();
+    } else if (type === 'multicast') {
+      ctx.fillStyle = '#1e293b';
+      ctx.strokeStyle = '#a855f7';
+      ctx.fillRect(30, 70, 70, 40);
+      ctx.strokeRect(30, 70, 70, 40);
+      ctx.fillStyle = '#f8fafc';
+      ctx.fillText('Nguồn', 48, 95);
 
-    setInterval(() => {
-      const now = Date.now();
-      let changed = false;
-      activeClients.forEach((client, id) => {
-        if (id !== myId && now - client.lastSeen > 8000) {
-          activeClients.delete(id);
-          changed = true;
+      [{x:320,y:20,yes:true},{x:320,y:75,yes:false},{x:320,y:130,yes:true}].forEach(r => {
+        ctx.fillStyle = '#1e293b';
+        ctx.strokeStyle = r.yes ? '#22c55e' : '#64748b';
+        ctx.fillRect(r.x, r.y, 70, 30);
+        ctx.strokeRect(r.x, r.y, 70, 30);
+        ctx.fillStyle = '#f8fafc';
+        ctx.fillText(r.yes ? 'Thành viên' : 'Ngoài nhóm', r.x + 4, r.y + 19);
+        if (r.yes) {
+          ctx.beginPath();
+          ctx.moveTo(100, 90);
+          ctx.lineTo(r.x, r.y + 15);
+          ctx.strokeStyle = 'rgba(168,85,247,.5)';
+          ctx.stroke();
         }
       });
-      if (changed) updateClientListUI();
-    }, 4000);
+      ctx.fillStyle = '#a855f7';
+      ctx.beginPath();
+      ctx.arc(100 + (step % 220), 90, 7, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (type === 'mqtt') {
+      const boxes = [
+        {x:50,y:105,w:110,h:50,label:'PUBLISHER',color:'#38bdf8'},
+        {x:395,y:90,w:110,h:80,label:'MQTT BROKER',color:'#a855f7'},
+        {x:740,y:50,w:110,h:50,label:'SUBSCRIBER 1',color:'#22c55e'},
+        {x:740,y:160,w:110,h:50,label:'SUBSCRIBER 2',color:'#22c55e'}
+      ];
+      boxes.forEach(b => {
+        ctx.fillStyle = '#1e293b';
+        ctx.strokeStyle = b.color;
+        ctx.fillRect(b.x,b.y,b.w,b.h);
+        ctx.strokeRect(b.x,b.y,b.w,b.h);
+        ctx.fillStyle = '#f8fafc';
+        ctx.font = 'bold 11px sans-serif';
+        ctx.fillText(b.label,b.x+8,b.y+b.h/2+4);
+      });
+      const p1 = 160 + (step % 235);
+      if (p1 <= 395) {
+        ctx.fillStyle = '#38bdf8';
+        ctx.beginPath();
+        ctx.arc(p1,130,8,0,Math.PI*2);
+        ctx.fill();
+      }
+      const p2 = 505 + (step % 235);
+      if (p2 <= 740) {
+        ctx.fillStyle = '#a855f7';
+        [75,185].forEach(y => {
+          ctx.beginPath();
+          ctx.arc(p2,y,8,0,Math.PI*2);
+          ctx.fill();
+        });
+      }
+      document.getElementById('mqttAnimText').textContent =
+        'Publisher gửi thông điệp lên Broker; Broker chuyển đến các Subscriber đã đăng ký Topic.';
+    }
+    requestAnimationFrame(draw);
+  }
+  draw();
+}
 
-    window.onload = () => {
-      startUnicastAnim();
-      startBroadcastAnim();
-      startMulticastAnim();
-      updateClientListUI();
+function startUnicastAnim() { animateNetwork('unicastCanvas', 'unicast'); }
+function startBroadcastAnim() { animateNetwork('broadcastCanvas', 'broadcast'); }
+function startMulticastAnim() { animateNetwork('multicastCanvas', 'multicast'); }
+function startMqttAnim() { animateNetwork('mqttAnimCanvas', 'mqtt'); }
+
+
+// ===== MQTT WHITEBOARD: CÁC TOPIC RIÊNG CỦA NHÓM 4 =====
+const canvas = document.getElementById('whiteboard');
+const ctx = canvas.getContext('2d');
+let painting = false;
+let currentColor = '#0f172a';
+let lastX = 0;
+let lastY = 0;
+
+const myId = 'Client_' + Math.floor(Math.random() * 9000 + 1000);
+document.getElementById('myClientId').textContent = myId;
+
+const topicName = 'netprog/group4/whiteboard/room_7f3a9c';
+const presenceTopic = 'netprog/group4/whiteboard/presence_7f3a9c';
+
+const activeClients = new Map();
+const remoteCursors = new Map();
+const networkStats = { sent: 0, dropped: 0, received: 0 };
+let lastCursorPublish = 0;
+
+activeClients.set(myId, {
+  id: myId,
+  status: 'Đang hoạt động',
+  lastSeen: Date.now()
+});
+
+function logMonitor(direction, topic, payload, note = '') {
+  const box = document.getElementById('mqttMonitor');
+  if (!box) return;
+
+  if (box.children.length === 1 &&
+      box.textContent.includes('Đang chờ')) {
+    box.innerHTML = '';
+  }
+
+  const line = document.createElement('div');
+  line.className = 'monitor-line';
+  const time = new Date().toLocaleTimeString();
+  let body = typeof payload === 'string' ? payload : JSON.stringify(payload);
+
+  if (body.length > 180) body = body.slice(0, 180) + '…';
+  line.textContent =
+    `[${time}] ${direction} | ${topic} | ${body}${note ? ' | ' + note : ''}`;
+
+  box.appendChild(line);
+  while (box.children.length > 100) {
+    box.removeChild(box.firstChild);
+  }
+  box.scrollTop = box.scrollHeight;
+}
+
+function updateNetworkStats() {
+  document.getElementById('statSent').textContent = networkStats.sent;
+  document.getElementById('statDropped').textContent = networkStats.dropped;
+  document.getElementById('statReceived').textContent = networkStats.received;
+}
+
+function resetNetworkStats() {
+  networkStats.sent = 0;
+  networkStats.dropped = 0;
+  networkStats.received = 0;
+  updateNetworkStats();
+  logNet('Đã đặt lại thống kê mạng mô phỏng.');
+}
+
+function clearMqttMonitor() {
+  document.getElementById('mqttMonitor').innerHTML =
+    '<div class="monitor-line">Nhật ký đã được xóa.</div>';
+}
+
+function logNet(msg) {
+  const logs = document.getElementById('netLogs');
+  const line = document.createElement('div');
+  line.className = 'log-line';
+
+  // Dùng textContent để tránh đưa dữ liệu MQTT vào HTML trực tiếp.
+  line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  logs.appendChild(line);
+  logs.scrollTop = logs.scrollHeight;
+
+  while (logs.children.length > 100) {
+    logs.removeChild(logs.firstChild);
+  }
+}
+
+function updateClientListUI() {
+  const container = document.getElementById('clientListContainer');
+  container.innerHTML = '';
+  document.getElementById('clientCountBadge').textContent =
+    `${activeClients.size} Online`;
+
+  activeClients.forEach((info, id) => {
+    const item = document.createElement('div');
+    item.className = 'client-item';
+
+    const name = document.createElement('span');
+    const bold = document.createElement('b');
+    bold.textContent = id;
+    name.appendChild(bold);
+    name.appendChild(document.createTextNode(id === myId ? ' (Bạn)' : ''));
+
+    const status = document.createElement('span');
+    status.className = 'badge badge-green';
+    status.textContent = info.status;
+
+    item.append(name, status);
+    container.appendChild(item);
+  });
+}
+
+function renderRemoteCursor(id, data) {
+  const layer = document.getElementById('cursorLayer');
+  let marker = remoteCursors.get(id);
+
+  if (!marker) {
+    marker = document.createElement('div');
+    marker.className = 'remote-cursor';
+    layer.appendChild(marker);
+    remoteCursors.set(id, marker);
+  }
+
+  marker.style.left = `${Math.max(0, Math.min(1, data.x)) * 100}%`;
+  marker.style.top = `${Math.max(0, Math.min(1, data.y)) * 100}%`;
+  marker.style.setProperty('--cursor-color', data.color || '#38bdf8');
+  marker.textContent = id;
+  marker.dataset.lastSeen = String(Date.now());
+}
+
+function publishCursor(pos) {
+  const now = Date.now();
+  if (now - lastCursorPublish < 80 || !client.connected) return;
+  lastCursorPublish = now;
+
+  const rect = canvas.getBoundingClientRect();
+  const data = {
+    sender: myId,
+    type: 'cursor',
+    x: pos.x / rect.width,
+    y: pos.y / rect.height,
+    color: currentColor
+  };
+
+  publishSimulated(topicName, JSON.stringify(data), false);
+}
+
+function publishSimulated(topic, payload, isDrawing = false) {
+  if (!client.connected) {
+    logNet('Chưa kết nối broker; không gửi được thông điệp.');
+    logMonitor('SEND-FAIL', topic, payload, 'client offline');
+    return;
+  }
+
+  if (isDrawing) {
+    const lossPercent = Number(document.getElementById('lossRange').value);
+    const delayMs = Number(document.getElementById('delayRange').value);
+
+    // Đây là mất thông điệp giả lập tại client, không phải mất gói mạng thật.
+    if (Math.random() * 100 < lossPercent) {
+      networkStats.dropped++;
+      updateNetworkStats();
+      logMonitor('DROP-SIM', topic, payload, `mất giả lập ${lossPercent}%`);
+      return;
+    }
+
+    const send = () => {
+      if (!client.connected) return;
+
+      client.publish(topic, payload, { qos: 0 }, err => {
+        if (err) {
+          logMonitor('SEND-ERR', topic, payload, err.message);
+          return;
+        }
+        networkStats.sent++;
+        updateNetworkStats();
+        logMonitor(
+          'SEND',
+          topic,
+          payload,
+          delayMs ? `trễ giả lập ${delayMs} ms` : 'đã publish'
+        );
+      });
     };
-  </script>
+
+    if (delayMs > 0) setTimeout(send, delayMs);
+    else send();
+  } else {
+    client.publish(topic, payload);
+    logMonitor('SEND', topic, payload);
+  }
+}
+
+const client = mqtt.connect('wss://broker.hivemq.com:8884/mqtt', {
+  clientId: myId
+});
+
+client.on('connect', () => {
+  logNet('Đã kết nối thành công tới Public MQTT Broker!');
+  document.getElementById('connStatus').textContent = 'Đã kết nối';
+  document.getElementById('connStatus').className = 'badge badge-green';
+
+  client.subscribe([topicName, presenceTopic], err => {
+    if (err) {
+      logNet('Không thể đăng ký Topic: ' + err.message);
+      return;
+    }
+    logNet('Đã Subscribe vào các Topic của nhóm.');
+    logMonitor('SUBSCRIBE', `${topicName}, ${presenceTopic}`, 'QoS 0');
+  });
+
+  client.publish(presenceTopic, JSON.stringify({
+    id: myId,
+    status: 'Trực tuyến'
+  }));
+});
+
+client.on('reconnect', () => {
+  document.getElementById('connStatus').textContent = 'Đang kết nối lại';
+  document.getElementById('connStatus').className = 'badge badge-amber';
+  logNet('Đang thử kết nối lại tới broker...');
+});
+
+client.on('offline', () => {
+  document.getElementById('connStatus').textContent = 'Ngoại tuyến';
+  document.getElementById('connStatus').className = 'badge badge-amber';
+});
+
+client.on('error', err => {
+  logNet('Lỗi MQTT: ' + err.message);
+});
+
+client.on('message', (topic, message) => {
+  try {
+    const data = JSON.parse(message.toString());
+    logMonitor('RECV', topic, data);
+
+    if (topic === topicName && data.sender !== myId) {
+      networkStats.received++;
+      updateNetworkStats();
+    }
+
+    if (topic === presenceTopic) {
+      if (data.id && data.id !== myId) {
+        activeClients.set(data.id, {
+          id: data.id,
+          status: 'Trực tuyến',
+          lastSeen: Date.now()
+        });
+        updateClientListUI();
+      }
+      return;
+    }
+
+    if (topic !== topicName || data.sender === myId) return;
+
+    if (data.type === 'cursor') {
+      renderRemoteCursor(data.sender, data);
+    } else if (data.type === 'draw') {
+      drawLine(data.x1, data.y1, data.x2, data.y2, data.color, data.size);
+      logNet(`${data.sender} vừa vẽ trên bảng chung.`);
+    } else if (data.type === 'clear') {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      logNet(`${data.sender} đã xóa bảng chung.`);
+    }
+  } catch (err) {
+    logMonitor('PARSE-ERR', topic, message.toString(), err.message);
+  }
+});
+
+  <script>
+function getCursorPos(e) {
+  const rect = canvas.getBoundingClientRect();
+  const point = e.touches && e.touches.length
+    ? e.touches[0]
+    : e;
+
+  // Quy đổi từ kích thước hiển thị sang tọa độ thật của canvas.
+  return {
+    x: (point.clientX - rect.left) * canvas.width / rect.width,
+    y: (point.clientY - rect.top) * canvas.height / rect.height
+  };
+}
+
+function startPosition(e) {
+  e.preventDefault();
+  painting = true;
+  const pos = getCursorPos(e);
+  lastX = pos.x;
+  lastY = pos.y;
+}
+
+function drawPosition(e) {
+  if (!painting) return;
+  e.preventDefault();
+
+  const pos = getCursorPos(e);
+  const currentX = pos.x;
+  const currentY = pos.y;
+  const size = Number(document.getElementById('brushSize').value);
+
+  drawLine(lastX, lastY, currentX, currentY, currentColor, size);
+
+  const packet = JSON.stringify({
+    sender: myId,
+    type: 'draw',
+    x1: lastX,
+    y1: lastY,
+    x2: currentX,
+    y2: currentY,
+    color: currentColor,
+    size
+  });
+
+  publishSimulated(topicName, packet, true);
+  publishCursor(pos);
+
+  lastX = currentX;
+  lastY = currentY;
+}
+
+function endPosition() {
+  painting = false;
+}
+
+canvas.addEventListener('mousemove', e => {
+  const pos = getCursorPos(e);
+  if (!painting) publishCursor(pos);
+});
+
+canvas.addEventListener('touchmove', e => {
+  if (painting || !e.touches || !e.touches.length) return;
+  publishCursor(getCursorPos(e));
+}, { passive: true });
+
+canvas.addEventListener('mousedown', startPosition);
+canvas.addEventListener('mousemove', drawPosition);
+canvas.addEventListener('mouseup', endPosition);
+canvas.addEventListener('mouseleave', endPosition);
+
+canvas.addEventListener('touchstart', startPosition, { passive: false });
+canvas.addEventListener('touchmove', drawPosition, { passive: false });
+canvas.addEventListener('touchend', endPosition);
+
+function drawLine(x1, y1, x2, y2, color, size) {
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = Number(size) || 1;
+  ctx.lineCap = 'round';
+  ctx.stroke();
+  ctx.closePath();
+}
+
+function setColor(color, element) {
+  currentColor = color;
+  document.querySelectorAll('.color-btn').forEach(btn => {
+    btn.classList.remove('active');
+  });
+  element.classList.add('active');
+}
+
+function clearBoard() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  if (client.connected) {
+    const packet = JSON.stringify({
+      sender: myId,
+      type: 'clear'
+    });
+    client.publish(topicName, packet);
+    logMonitor('SEND', topicName, packet);
+  }
+
+  logNet('Bạn đã gửi lệnh xóa toàn bộ bảng vẽ.');
+}
+
+// Gửi trạng thái hiện diện định kỳ cho các thành viên cùng phòng.
+setInterval(() => {
+  if (client.connected) {
+    client.publish(presenceTopic, JSON.stringify({
+      id: myId,
+      status: 'Trực tuyến'
+    }));
+  }
+}, 3000);
+
+// Xóa thành viên cũ và con trỏ không còn hoạt động.
+setInterval(() => {
+  const now = Date.now();
+  let changed = false;
+
+  activeClients.forEach((info, id) => {
+    if (id !== myId && now - info.lastSeen > 8000) {
+      activeClients.delete(id);
+      changed = true;
+    }
+  });
+
+  if (changed) updateClientListUI();
+
+  remoteCursors.forEach((marker, id) => {
+    if (now - Number(marker.dataset.lastSeen || 0) > 5000) {
+      marker.remove();
+      remoteCursors.delete(id);
+    }
+  });
+}, 4000);
+
+window.addEventListener('beforeunload', () => {
+  if (client.connected) {
+    client.publish(presenceTopic, JSON.stringify({
+      id: myId,
+      status: 'Offline'
+    }));
+    client.end(true);
+  }
+});
+
+window.onload = () => {
+  startUnicastAnim();
+  startBroadcastAnim();
+  startMulticastAnim();
+  updateClientListUI();
+};
+</script>
 </body>
 </html>
